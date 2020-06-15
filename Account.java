@@ -1,40 +1,62 @@
-public class Account
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.Condition;
+
+public class Account implements Buffer
 {
-  private static final int DEFAULT_BALANCE = 250;
-  private static int balance;
+  private Lock accessLock = new ReentrantLock();
 
-  public Account(int balance)
-  {
-    this.balance = balance;
-  }
+  private Condition canDeposit = accessLock.newCondition();
+  private Condition canWithdraw = accessLock.newCondition();
 
-  public Account()
-  {
-    this(DEFAULT_BALANCE);
-  }
+  private static int balance = 0;
 
-  public static boolean withdraw(int amount)
+  public void deposit(int deposit, String tName)
   {
-    if (amount > balance)
+
+    try
     {
-      return false;
+      accessLock.lock();
+      balance += deposit;
+      System.out.println("Thread " + tName + " deposits $" + deposit + "\t\t\t\t\t\t   (+) Balance is $" + balance);
+      canWithdraw.signal();
+      canDeposit.await();
     }
-    else
+    catch (InterruptedException e)
     {
-      balance -= amount;
-      return true;
+      e.printStackTrace();
+    }
+    finally
+    {
+      accessLock.unlock();
     }
   }
 
-  public static boolean deposit(int amount)
+  public void withdraw(int withdraw, String tName)
   {
-    balance += amount;
-    return true;
+    try
+    {
+      accessLock.lock();
+      if (this.balance < withdraw)
+      {
+        System.out.println("\t\t\t\t\tThread " + tName + " withdraws $" + withdraw + "\t   (***) Withdraw - Blocked - Insufficient Funds!!!");
+        canDeposit.signal();
+      }
+      else
+      {
+        this.balance -= withdraw;
+        System.out.println("\t\t\t\t\tThread " + tName + " withdraws $" + withdraw + "\t   (-) Balance is $" + balance);
+        canWithdraw.await();
+        canDeposit.signal();
+      }
+    }
+    catch (InterruptedException e)
+    {
+      e.printStackTrace();
+    }
+    finally
+    {
+      accessLock.unlock();
+    }
   }
-
-  public static int getBalance()
-  {
-    return balance;
-  }
-
 }
